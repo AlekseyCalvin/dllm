@@ -6,6 +6,7 @@ Examples
 # Raw multi-turn generation (default)
 python -u examples/bert/chat.py --model_name_or_path "YOUR_MODEL_PATH" --chat True
 """
+
 import sys
 from dataclasses import dataclass
 import transformers
@@ -13,7 +14,6 @@ import transformers
 import dllm
 from dllm.pipelines import llada
 from dllm.tools.chat import multi_turn_chat, single_turn_generate
-
 
 
 @dataclass
@@ -34,15 +34,13 @@ class ScriptArguments:
 class GeneratorConfig(llada.LLaDAGeneratorConfig):
     steps: int = 128
     max_new_tokens: int = 128
-    block_length: int = 128
+    block_length: int = 32
     temperature: float = 0.0
     remasking: str = "low_confidence"
 
 
 def main():
-    parser = transformers.HfArgumentParser(
-        (ScriptArguments, GeneratorConfig)
-    )
+    parser = transformers.HfArgumentParser((ScriptArguments, GeneratorConfig))
     script_args, gen_config = parser.parse_args_into_dataclasses()
     transformers.set_seed(script_args.seed)
 

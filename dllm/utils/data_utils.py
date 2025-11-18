@@ -19,7 +19,7 @@ def tokenize_and_group(
     seq_length: int = 1024,
     insert_eos: bool = False,
     drop_tail: bool = True,
-    add_special_tokens: bool = False
+    add_special_tokens: bool = False,
 ):
     # 1) Tokenize (batched input)
     tokenized = tokenizer(examples[text_field], add_special_tokens=add_special_tokens)
@@ -46,13 +46,12 @@ def tokenize_and_group(
         total_len = len(concatenated)
 
     # Split into fixed-length chunks
-    chunks = [concatenated[i:i+seq_length] for i in range(0, total_len, seq_length)]
+    chunks = [concatenated[i : i + seq_length] for i in range(0, total_len, seq_length)]
 
     return {
         "input_ids": chunks,
         "labels": [c[:] for c in chunks],  # Labels are the same as input_ids
     }
-
 
 
 def clip_row(row: dict, max_length: int, truncation: str = "right") -> dict:
@@ -74,6 +73,7 @@ def post_process_dataset(
         return dataset.filter(
             lambda row: len(row["input_ids"]) <= data_args.max_length,
             num_proc=data_args.num_proc,
+            desc=f"Filtering samples with length <= {data_args.max_length}",
         )
     elif data_args.truncation == "right":
         # do this only if dataset has "prompt_len"
@@ -81,10 +81,12 @@ def post_process_dataset(
             dataset = dataset.filter(
                 lambda row: row["prompt_len"] <= data_args.max_length,
                 num_proc=data_args.num_proc,
+                desc=f"Filtering samples with `prompt_len` <= {data_args.max_length}",
             )
         return dataset.map(
             lambda row: clip_row(row, data_args.max_length, truncation="right"),
             num_proc=data_args.num_proc,
+            desc=f"Right-truncating samples to max_length={data_args.max_length}",
         )
     else:
         raise NotImplementedError

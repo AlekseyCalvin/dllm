@@ -32,6 +32,8 @@ import accelerate
 
 import dllm
 
+logger = dllm.utils.get_default_logger(__name__)
+
 
 @dataclass
 class ModelArguments(dllm.utils.ModelArguments):
@@ -84,7 +86,8 @@ def train():
     )
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     # necessary for streaming dataset
-    if data_args.streaming: training_args.accelerator_config.dispatch_batches = False
+    if data_args.streaming:
+        training_args.accelerator_config.dispatch_batches = False
     dllm.utils.print_args_main(model_args, data_args, training_args)
     dllm.utils.initial_training_setup(model_args, data_args, training_args)
 
@@ -104,22 +107,25 @@ def train():
     # ----- Dataset ----------------------------------------------------------------
     with accelerate.PartialState().local_main_process_first():
         dataset = dllm.data.load_pt_dataset(
-            data_args.dataset_args, 
+            data_args.dataset_args,
             streaming=data_args.streaming,
         )
         dataset = dataset.map(
             functools.partial(
-                dllm.utils.tokenize_and_group, 
-                tokenizer=tokenizer, 
-                text_field=data_args.text_field, 
-                seq_length=data_args.max_length, 
+                dllm.utils.tokenize_and_group,
+                tokenizer=tokenizer,
+                text_field=data_args.text_field,
+                seq_length=data_args.max_length,
                 insert_eos=data_args.insert_eos,
-                drop_tail=data_args.drop_tail),
+                drop_tail=data_args.drop_tail,
+            ),
             batched=True,
-            num_proc=None if data_args.streaming else data_args.num_proc,
             remove_columns=dataset["train"].column_names,
+            **({} if data_args.streaming else {"num_proc": data_args.num_proc}),
+            **({} if data_args.streaming else {"desc": "Mapping dataset to PT format"}),
         )
-        if data_args.streaming: dataset = dataset.shuffle(seed=training_args.seed)
+        if data_args.streaming:
+            dataset = dataset.shuffle(seed=training_args.seed)
 
     # ----- Training --------------------------------------------------------------
     @dataclass
@@ -135,14 +141,15 @@ def train():
                     1, outputs["input_ids"].shape[1] + 1, (1,)
                 )
                 for key in ["input_ids", "labels", "attention_mask"]:
-                    if key in outputs: outputs[key] = outputs[key][:, :random_length]
+                    if key in outputs:
+                        outputs[key] = outputs[key][:, :random_length]
             # Check if attention_mask is all ones and set it to None
             if torch.all(outputs["attention_mask"] == 1):
                 outputs.pop("attention_mask")
             return outputs
 
     accelerate.PartialState().wait_for_everyone()
-    dllm.utils.print_main("start training...")
+    logger.info("Start training...")
     trainer = dllm.core.trainers.MDLMTrainer(
         model=model,
         tokenizer=tokenizer,
